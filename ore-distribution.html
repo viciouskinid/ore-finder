@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minecraft Ore Distribution</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #050a0f;
+      --surface: #0e1a2b;
+      --border: #1a3050;
+      --accent: #00d4ff;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --panel: rgba(0,20,40,0.9);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Share Tech Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    header {
+      width: 100%;
+      background: rgba(5,10,20,0.97);
+      border-bottom: 1px solid rgba(0,180,255,0.14);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    header h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: 15px;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      text-shadow: 0 0 18px rgba(0,212,255,0.55);
+    }
+    header span { font-size: 11px; color: rgba(0,212,255,0.32); letter-spacing: 0.08em; }
+
+    .page { width: 100%; max-width: 1200px; padding: 24px 16px 40px; }
+
+    /* ── Version Tabs ── */
+    .version-tabs {
+      display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .vtab {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid #2a3a50;
+      border-radius: 6px;
+      color: var(--muted);
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: 'Share Tech Mono', monospace;
+      transition: all 0.14s;
+    }
+    .vtab:hover { border-color: var(--accent); color: var(--text); }
+    .vtab.active { border-color: var(--accent); background: rgba(0,212,255,0.08); color: var(--accent); }
+
+    /* ── Chart Container ── */
+    .chart-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 16px 20px;
+      position: relative;
+      overflow-x: auto;
+    }
+    .chart-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      text-align: center;
+      letter-spacing: 0.1em;
+      margin-bottom: 20px;
+    }
+
+    canvas#distChart {
+      display: block;
+    }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 20px;
+      margin-top: 18px;
+      justify-content: center;
+    }
+    .leg-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      color: var(--text);
+    }
+    .leg-swatch {
+      width: 22px; height: 10px; border-radius: 2px; flex-shrink: 0;
+    }
+    .leg-swatch.hatch {
+      background-image: repeating-linear-gradient(
+        45deg, transparent, transparent 2px, rgba(0,0,0,0.5) 2px, rgba(0,0,0,0.5) 4px
+      );
+    }
+
+    /* ── Info Box ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 10px;
+      margin-top: 22px;
+    }
+    .info-card {
+      background: rgba(0,0,0,0.28);
+      border: 1px solid #1a2a3a;
+      border-radius: 8px;
+      padding: 10px 13px;
+      font-size: 11px;
+      line-height: 1.7;
+    }
+    .info-card-header {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: bold; margin-bottom: 5px;
+    }
+    .info-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .info-card .row { display: flex; justify-content: space-between; color: var(--muted); }
+    .info-card .row span:last-child { color: var(--text); }
+
+    .note {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 16px;
+      text-align: center;
+      line-height: 1.6;
+    }
+    .note em { color: rgba(0,212,255,0.5); font-style: normal; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>&#9935; ORE DISTRIBUTION</h1>
+  <span>MINECRAFT &middot; Y-LEVEL ABUNDANCE CHART</span>
+</header>
+
+<div class="page">
+  <div class="version-tabs" id="versionTabs">
+    <button class="vtab active" data-version="1.18">Java / Bedrock 1.18+</button>
+    <button class="vtab" data-version="1.17">Java / Bedrock 1.17 &amp; earlier</button>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-title" id="chartTitle">Minecraft 1.18+ Ore Distribution by Y Level</div>
+    <canvas id="distChart"></canvas>
+
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="info-grid" id="infoGrid"></div>
+
+  <div class="note">
+    * <em>Reduced air exposure</em> = when an ore block is about to be placed, if it is exposed to air it has a chance of being skipped instead &mdash; making these ores rarer on cave walls but more common in solid rock.<br>
+    Width = relative abundance at that Y level &nbsp;&middot;&nbsp; Height = Y-level range
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  DATA — Ore distribution curves per version
+//  Each entry: { key, label, color, hatch?, note?, ranges[] }
+//  range: { yMin, yMax, peakY?, shape, maxWeight, reducedAir?, label? }
+//  shape: 'triangle'|'uniform'|'bell'|'trapezoid'
+// ═══════════════════════════════════════════════════════════
+const VERSIONS = {
+  '1.18': {
+    title: 'Minecraft 1.18+ Ore Distribution by Y Level',
+    worldMin: -64,
+    worldMax: 320,
+    ores: [
+      {
+        key: 'coal', label: 'Coal', color: '#292929',
+        note: 'Very common near surface. Reduced air exposure above Y 136.',
+        ranges: [
+          { yMin: 0,   yMax: 320, shape: 'triangle', peakY: 96, maxWeight: 1.0 },
+        ]
+      },
+      {
+        key: 'iron', label: 'Iron', color: '#d4a88a',
+        note: 'Two separate distributions: common mid-depths and high mountains.',
+        ranges: [
+          { yMin: -24, yMax: 56,  shape: 'bell',     peakY: 16,  maxWeight: 0.6, label: 'Lower iron vein' },
+          { yMin: 80,  yMax: 320, shape: 'triangle', peakY: 232, maxWeight: 0.6, label: 'Large iron vein' },
+        ]
+      },
+      {
+        key: 'copper', label: 'Copper', color: '#c07040',
+        note: 'Bell curve centred around Y 48. More common in dripstone caves.',
+        ranges: [
+          { yMin: -16, yMax: 112, shape: 'bell', peakY: 48, maxWeight: 0.55 },
+        ]
+      },
+      {
+        key: 'gold', label: 'Gold', color: '#e0c000',
+        note: 'Rectangular distribution between Y -64 and 32. Extra spawn in badlands.',
+        ranges: [
+          { yMin: -64, yMax: 32,  shape: 'trapezoid', peakY: -16, maxWeight: 0.42 },
+        ]
+      },
+      {
+        key: 'gold_badlands', label: 'Gold (Badlands only)', color: '#e0c000', hatch: true,
+        note: 'Extra gold veins that generate only in badlands biomes.',
+        ranges: [
+          { yMin: -64, yMax: 256, shape: 'uniform', maxWeight: 0.25 },
+        ]
+      },
+      {
+        key: 'redstone', label: 'Redstone', color: '#cc2200',
+        note: 'Uniform below Y 16, small bulge near bedrock.',
+        ranges: [
+          { yMin: -64, yMax: 16,  shape: 'uniform',  maxWeight: 0.56 },
+          { yMin: -64, yMax: -50, shape: 'triangle', peakY: -64, maxWeight: 0.2 },
+        ]
+      },
+      {
+        key: 'lapis', label: 'Lapis Lazuli', color: '#2255cc',
+        note: 'Triangle distribution peaking at Y 0. Reduced air exposure.',
+        ranges: [
+          { yMin: -64, yMax: 64, shape: 'bell', peakY: 0, maxWeight: 0.5, reducedAir: true },
+        ]
+      },
+      {
+        key: 'diamond', label: 'Diamond', color: '#44eeff',
+        note: 'Best below Y -58. Reduced air exposure makes solid-rock mining better.',
+        ranges: [
+          { yMin: -64, yMax: 16, shape: 'triangle', peakY: -64, maxWeight: 1.0, reducedAir: true },
+        ]
+      },
+      {
+        key: 'emerald', label: 'Emerald (mountains only)', color: '#22cc66',
+        note: 'Triangle peak at Y 256. Only generates in mountain biomes (1.18+).',
+        ranges: [
+          { yMin: -16, yMax: 320, shape: 'triangle', peakY: 256, maxWeight: 0.35 },
+        ]
+      },
+    ]
+  },
+  '1.17': {
+    title: 'Minecraft 1.17 and Earlier — Ore Distribution by Y Level',
+    worldMin: 0,
+    worldMax: 128,
+    ores: [
+      {
+        key: 'coal', label: 'Coal', color: '#292929',
+        note: 'Common from surface down to Y 0.',
+        ranges: [
+          { yMin: 0, yMax: 128, shape: 'uniform', maxWeight: 0.9 },
+        ]
+      },
+      {
+        key: 'iron', label: 'Iron', color: '#d4a88a',
+        note: 'Uniform from Y 0–64.',
+        ranges: [
+          { yMin: 0, yMax: 64, shape: 'uniform', maxWeight: 0.7 },
+        ]
+      },
+      {
+        key: 'gold', label: 'Gold', color: '#e0c000',
+        note: 'Uniform from Y 0–32. Extra in badlands up to Y 80.',
+        ranges: [
+          { yMin: 0, yMax: 32, shape: 'uniform', maxWeight: 0.4 },
+        ]
+      },
+      {
+        key: 'gold_badlands', label: 'Gold (Badlands only)', color: '#e0c000', hatch: true,
+        note: 'Extra gold up to Y 80 in badlands.',
+        ranges: [
+          { yMin: 0, yMax: 80, shape: 'uniform', maxWeight: 0.22 },
+        ]
+      },
+      {
+        key: 'redstone', label: 'Redstone', color: '#cc2200',
+        note: 'Only below Y 16.',
+        ranges: [
+          { yMin: 0, yMax: 16, shape: 'uniform', maxWeight: 0.55 },
+        ]
+      },
+      {
+        key: 'lapis', label: 'Lapis Lazuli', color: '#2255cc',
+        note: 'Triangle distribution peaking at Y 15.',
+        ranges: [
+          { yMin: 0, yMax: 32, shape: 'bell', peakY: 15, maxWeight: 0.45 },
+        ]
+      },
+      {
+        key: 'diamond', label: 'Diamond', color: '#44eeff',
+        note: 'Below Y 16 only. Equal chance at all depths.',
+        ranges: [
+          { yMin: 0, yMax: 16, shape: 'uniform', maxWeight: 0.85 },
+        ]
+      },
+      {
+        key: 'emerald', label: 'Emerald (mountains)', color: '#22cc66',
+        note: 'Only in mountain biomes Y 4–32.',
+        ranges: [
+          { yMin: 4, yMax: 32, shape: 'uniform', maxWeight: 0.3 },
+        ]
+      },
+    ]
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+//  COMPUTE weight for a Y value given a range spec
+// ═══════════════════════════════════════════════════════════
+function getWeight(y, range) {
+  const { yMin, yMax, shape, peakY, maxWeight } = range;
+  if (y < yMin || y > yMax) return 0;
+  const span = yMax - yMin;
+  let t = (y - yMin) / span; // 0..1
+
+  let w = 0;
+  if (shape === 'uniform') {
+    w = maxWeight;
+  } else if (shape === 'triangle') {
+    const peakT = peakY != null ? (peakY - yMin) / span : 0;
+    if (t <= peakT) {
+      w = peakT > 0 ? (t / peakT) * maxWeight : maxWeight;
+    } else {
+      w = peakT < 1 ? ((1 - t) / (1 - peakT)) * maxWeight : maxWeight;
+    }
+  } else if (shape === 'bell') {
+    const peakT = peakY != null ? (peakY - yMin) / span : 0.5;
+    const sigma = 0.28;
+    w = maxWeight * Math.exp(-0.5 * Math.pow((t - peakT) / sigma, 2));
+  } else if (shape === 'trapezoid') {
+    const peakT = peakY != null ? (peakY - yMin) / span : 0.5;
+    const hw = 0.25; // half-width flat top
+    const dist = Math.abs(t - peakT);
+    if (dist <= hw) {
+      w = maxWeight;
+    } else {
+      const rampW = 0.38;
+      w = maxWeight * Math.max(0, 1 - (dist - hw) / rampW);
+    }
+  }
+  return w;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DRAW
+// ═══════════════════════════════════════════════════════════
+const canvas  = document.getElementById('distChart');
+const ctx     = canvas.getContext('2d');
+const legendEl = document.getElementById('legend');
+const infoGrid = document.getElementById('infoGrid');
+const titleEl  = document.getElementById('chartTitle');
+
+let currentVersion = '1.18';
+
+// column layout
+const COL_W     = 52;   // max width of each ore column (px)
+const COL_GAP   = 6;
+const Y_AXIS_W  = 48;
+const PAD_TOP   = 36;
+const PAD_BOT   = 20;
+const PAD_RIGHT = 14;
+
+function draw(versionKey) {
+  const vd = VERSIONS[versionKey];
+  const { ores, worldMin, worldMax, title } = vd;
+  titleEl.textContent = title;
+
+  const totalY = worldMax - worldMin;
+  const nCols  = ores.length;
+  const totalW = Y_AXIS_W + nCols * (COL_W + COL_GAP) + PAD_RIGHT;
+
+  // DPR-aware sizing
+  const dpr = window.devicePixelRatio || 1;
+  const H_PX = Math.max(500, Math.min(window.innerHeight - 260, 720));
+  const W_PX = Math.max(totalW, 600);
+
+  canvas.width  = W_PX * dpr;
+  canvas.height = H_PX * dpr;
+  canvas.style.width  = W_PX + 'px';
+  canvas.style.height = H_PX + 'px';
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W_PX, H_PX);
+
+  const chartH = H_PX - PAD_TOP - PAD_BOT;  // drawable height
+
+  function yToPixel(y) {
+    return PAD_TOP + (1 - (y - worldMin) / totalY) * chartH;
+  }
+
+  // ── Background sky / stone / bedrock layers
+  const layers = versionKey === '1.18'
+    ? [
+        { y1: 64,  y2: worldMax,  color: 'rgba(100,180,255,0.05)', label: 'SKY/SURFACE' },
+        { y1: 0,   y2: 64,        color: 'rgba(120,90,60,0.06)',   label: '' },
+        { y1: worldMin, y2: 0,    color: 'rgba(80,60,40,0.1)',     label: 'DEEPSLATE' },
+      ]
+    : [
+        { y1: 64, y2: worldMax, color: 'rgba(100,180,255,0.05)', label: 'SKY' },
+        { y1: 0,  y2: 64,       color: 'rgba(120,90,60,0.06)',   label: 'STONE' },
+      ];
+
+  layers.forEach(({ y1, y2, color, label }) => {
+    const py1 = yToPixel(y2);
+    const py2 = yToPixel(y1);
+    ctx.fillStyle = color;
+    ctx.fillRect(Y_AXIS_W, py1, W_PX - Y_AXIS_W - PAD_RIGHT, py2 - py1);
+    if (label) {
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.font = '9px Share Tech Mono,monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(label, W_PX - PAD_RIGHT - 4, (py1 + py2) / 2);
+    }
+  });
+
+  // ── Y-axis grid lines at notable levels
+  const gridLevels = versionKey === '1.18'
+    ? [-64,-48,-32,-16,0,16,32,48,64,80,96,112,128,160,192,224,256,288,320]
+    : [0,8,16,24,32,40,48,56,64,80,96,112,128];
+
+  gridLevels.forEach(y => {
+    const py = yToPixel(y);
+    const isZero = y === 0;
+    ctx.beginPath();
+    ctx.moveTo(Y_AXIS_W, py);
+    ctx.lineTo(W_PX - PAD_RIGHT, py);
+    ctx.strokeStyle = isZero ? 'rgba(0,200,255,0.22)' : 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = isZero ? 1 : 0.5;
+    ctx.setLineDash(isZero ? [6, 6] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Y axis label
+    ctx.fillStyle = isZero ? 'rgba(0,200,255,0.6)' : 'rgba(255,255,255,0.25)';
+    ctx.font = (isZero ? 'bold ' : '') + '9px Share Tech Mono,monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(y, Y_AXIS_W - 5, py + 3);
+  });
+
+  // ── Y axis line
+  ctx.beginPath();
+  ctx.moveTo(Y_AXIS_W, PAD_TOP);
+  ctx.lineTo(Y_AXIS_W, PAD_TOP + chartH);
+  ctx.strokeStyle = 'rgba(0,180,255,0.2)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // ── Y axis label
+  ctx.save();
+  ctx.translate(11, PAD_TOP + chartH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = 'rgba(0,212,255,0.35)';
+  ctx.font = '10px Share Tech Mono,monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('Y  LEVEL', 0, 0);
+  ctx.restore();
+
+  // ── Ore columns
+  ores.forEach((ore, colIdx) => {
+    const colX = Y_AXIS_W + colIdx * (COL_W + COL_GAP) + (COL_GAP / 2);
+
+    // Compute per-pixel weight
+    const STEP = 1;
+    for (let y = worldMin; y <= worldMax; y += STEP) {
+      let w = 0;
+      ore.ranges.forEach(range => { w = Math.max(w, getWeight(y, range)); });
+      if (w <= 0.001) continue;
+
+      const barW = w * COL_W * 0.92;
+      const py   = yToPixel(y);
+      const ph   = Math.max(1, chartH / totalY * STEP * 1.2);
+      const bx   = colX + (COL_W - barW) / 2;
+
+      if (ore.hatch) {
+        ctx.fillStyle = ore.color;
+        ctx.fillRect(bx, py - ph / 2, barW, ph);
+        // hatch overlay
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(bx, py - ph / 2, barW, ph);
+        ctx.clip();
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+        ctx.lineWidth = 1;
+        for (let hx = bx - ph; hx < bx + barW + ph; hx += 4) {
+          ctx.beginPath();
+          ctx.moveTo(hx, py - ph / 2);
+          ctx.lineTo(hx + ph * 2, py + ph / 2 + ph);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else {
+        ctx.fillStyle = ore.color;
+        ctx.fillRect(bx, py - ph / 2, barW, ph);
+      }
+    }
+
+    // Reduced air exposure label (vertical)
+    const airRange = ore.ranges.find(r => r.reducedAir);
+    if (airRange) {
+      const ay1 = yToPixel(airRange.yMax);
+      const ay2 = yToPixel(airRange.yMin);
+      const lx  = colX + COL_W / 2;
+      ctx.save();
+      ctx.translate(lx, (ay1 + ay2) / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.font = '7px Share Tech Mono,monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('reduced air exposure*', 0, 0);
+      ctx.restore();
+    }
+
+    // Column header (ore name, rotated)
+    const headerY = PAD_TOP - 6;
+    ctx.save();
+    ctx.translate(colX + COL_W / 2, headerY);
+    ctx.rotate(-Math.PI / 3.5);
+    ctx.fillStyle = ore.color;
+    ctx.font = 'bold 10px Share Tech Mono,monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(ore.label, 0, 0);
+    ctx.restore();
+  });
+
+  // ── Sea level / bedrock markers
+  [
+    { y: 0,          label: 'Sea Level (Y=0)',      col: 'rgba(0,200,255,0.5)' },
+    { y: worldMin,   label: 'Bedrock',              col: 'rgba(255,100,50,0.4)' },
+  ].forEach(({ y, label, col }) => {
+    if (y < worldMin) return;
+    const py = yToPixel(y);
+    ctx.fillStyle = col;
+    ctx.font = '9px Share Tech Mono,monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, Y_AXIS_W + 4, py - 3);
+  });
+
+  // ── Build legend + info cards
+  buildLegend(ores);
+  buildInfoCards(ores);
+}
+
+function buildLegend(ores) {
+  legendEl.innerHTML = '';
+  ores.forEach(ore => {
+    const item = document.createElement('div');
+    item.className = 'leg-item';
+    item.innerHTML =
+      '<div class="leg-swatch' + (ore.hatch ? ' hatch' : '') + '" style="background:' + ore.color + '"></div>' +
+      '<span>' + ore.label + '</span>';
+    legendEl.appendChild(item);
+  });
+}
+
+function buildInfoCards(ores) {
+  infoGrid.innerHTML = '';
+  ores.forEach(ore => {
+    const allMin = Math.min(...ore.ranges.map(r => r.yMin));
+    const allMax = Math.max(...ore.ranges.map(r => r.yMax));
+    const peaks  = ore.ranges
+      .filter(r => r.peakY != null)
+      .map(r => 'Y=' + r.peakY)
+      .join(', ') || 'Uniform';
+
+    const card = document.createElement('div');
+    card.className = 'info-card';
+    card.innerHTML =
+      '<div class="info-card-header">' +
+        '<div class="info-dot" style="background:' + ore.color + ';box-shadow:0 0 6px ' + ore.color + '"></div>' +
+        ore.label +
+      '</div>' +
+      '<div class="row"><span>Y Range</span><span>' + allMin + ' → ' + allMax + '</span></div>' +
+      '<div class="row"><span>Peak</span><span>' + peaks + '</span></div>' +
+      '<div class="row"><span>Note</span><span style="text-align:right;max-width:200px">' + ore.note + '</span></div>';
+    infoGrid.appendChild(card);
+  });
+}
+
+// ── Initial draw
+draw(currentVersion);
+
+// ── Version tab switching
+document.getElementById('versionTabs').addEventListener('click', e => {
+  const btn = e.target.closest('.vtab');
+  if (!btn) return;
+  currentVersion = btn.dataset.version;
+  document.querySelectorAll('.vtab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  draw(currentVersion);
+});
+
+window.addEventListener('resize', () => draw(currentVersion));
+</script>
+</body>
+</html>
